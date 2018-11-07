@@ -123,6 +123,36 @@ If you are using Rails, this will be automatically enabled in `development` and 
       multidb:
         fallback: true
 
+## SQL Caching
+
+To use [SQL Caching](https://guides.rubyonrails.org/caching_with_rails.html#sql-caching) (per request in memory caching of queries), add the `query_cache: true`. If you add it at the same level as the `multidb:` entry, then all multidb connections use SQL Caching. If you add it to specific `databases:` entries under `multidb:`, then SQL Caching is turned on only for those entries.
+
+    production:
+      adapter: postgresql
+      database: myapp_production
+      username: ohoh
+      password: mymy
+      host: db1
+      multidb:
+        databases:
+          slave:
+            host: db-slave
+            query_cache:true
+          other:
+            host: db-other
+
+The above example would turn on SQL Caching for this example:
+
+    Multidb.use(:slave) do
+      @posts = Post.all
+    end
+
+But not for this example:
+
+    Multidb.use(:other) do
+      @comments = Comments.all
+    end
+
 ## Limitations
 
 Multidb does not support per-class connections (eg., calling `establish_connection` within a class, as opposed to `ActiveRecord::Base`).
