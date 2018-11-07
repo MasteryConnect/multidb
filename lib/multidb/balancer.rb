@@ -26,6 +26,9 @@ module Multidb
           end
 
           @connection_pool = ActiveRecord::ConnectionAdapters::ConnectionPool.new(spec)
+          # Should we use query caching for this target?
+          # Only applies to Multidb.use with a block
+          @query_cache_enabled = target[:query_cache].present? ? target[:query_cache] : false
       else
         @connection_pool = target
       end
@@ -39,7 +42,7 @@ module Multidb
       end
     end
 
-    attr_reader :connection_pool, :name
+    attr_reader :connection_pool, :name, :query_cache_enabled
   end
 
   class Balancer
@@ -69,8 +72,8 @@ module Multidb
     def append(databases)
       databases.each_pair do |name, config|
         configs = config.is_a?(Array) ? config : [config]
-        configs.each do |config|
-          candidate = Candidate.new(name, @default_configuration.default_adapter.merge(config))
+        configs.each do |cfg|
+          candidate = Candidate.new(name, @default_configuration.default_adapter.merge(cfg))
           @candidates[name] ||= []
           @candidates[name].push(candidate)
         end
@@ -96,6 +99,7 @@ module Multidb
       result = nil
       get(name) do |candidate|
         if block_given?
+          candidate.connection_pool.enable_query_cache! if candidate.query_cache_enabled
           candidate.connection do |connection|
             previous_configuration = Thread.current[:multidb]
             Thread.current[:multidb] = {
@@ -106,6 +110,7 @@ module Multidb
               result = yield
               result = result.to_a if result.is_a?(ActiveRecord::Relation)
             ensure
+              candidate.connection_pool.enable_query_cache! if candidate.query_cache_enabled
               Thread.current[:multidb] = previous_configuration
             end
             result
